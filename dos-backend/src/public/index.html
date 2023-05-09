@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8" />
+    <title>Chat Client</title>
+    <link href="bootstrap.css" rel="stylesheet" />
+    <style>
+      body {
+        padding: 20px;
+      }
+
+      #console {
+        height: 400px;
+        overflow: auto;
+      }
+
+      .username-msg {
+        color: orange;
+      }
+
+      .connect-msg {
+        color: green;
+      }
+
+      .disconnect-msg {
+        color: red;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Chat Client</h1>
+    <br />
+
+    <div id="console" class="well"></div>
+
+    <label for="cards">Choose cards</label>
+    <select name="cards" id="cards" multiple>
+      <option value="volvo">Volvo</option>
+      <option value="saab">Saab</option>
+      <option value="opel">Opel</option>
+      <option value="audi">Audi</option>
+    </select>
+    <label for="ccards">Choose a center card:</label>
+    <select name="ccards" id="ccards" multiple>
+      <option value="volvo">Volvo</option>
+      <option value="saab">Saab</option>
+      <option value="opel">Opel</option>
+      <option value="audi">Audi</option>
+    </select>
+    <br /><br />
+    <input type="submit" value="Submit" />
+
+    <form class="well form-inline" onsubmit="return false;">
+      <input
+        id="msg"
+        class="input-xlarge"
+        type="text"
+        placeholder="Type something..."
+      />
+      <input
+        id="game_id"
+        class="input-xlarge"
+        type="text"
+        placeholder="Ttype game id..."
+      />
+
+      <input
+        id="player_id"
+        class="input-xlarge"
+        type="text"
+        placeholder="this is player id ..."
+      />
+      <button type="button" onClick="sendMessage()" class="btn" id="send">
+        Send
+      </button>
+      <button type="button" onClick="sendCreate()" class="btn">Create</button>
+      <button type="button" onClick="sendJoin()" class="btn">join</button>
+      <button type="button" onClick="sendPlay()" class="btn">Play</button>
+      <button type="button" onClick="sendThrow()" class="btn">throw</button>
+      <button type="button" onClick="sendBuy()" class="btn">Buy</button>
+      <button type="button" onClick="sendEnd()" class="btn">end</button>
+    </form>
+
+    <script src="js/socket.io-2.2.0.js"></script>
+    <script src="js/moment-2.24.0.min.js"></script>
+    <script src="js/jquery-3.3.1.min.js"></script>
+
+    <script>
+      var userName = "user" + Math.floor(Math.random() * 1000 + 1);
+      var socket = io(
+        /*'http://91.169.40.61:33110/chat?token=abc123'*/
+        /*document.location.origin,*/
+
+        {
+          allowEIO3: false,
+          transports: ["polling", "websocket"],
+        }
+      );
+      socket.on("connect", function () {
+        output(
+          '<span class="connect-msg">The client has connected with the server. Username: ' +
+            userName +
+            "</span>"
+        );
+      });
+      socket.on("chat", function (data) {
+        console.log("Received message", data);
+        output(
+          '<span class="username-msg">' +
+            data.userName +
+            ":</span> " +
+            data.message
+        );
+      });
+      socket.on("created", function (data) {
+        console.log("created", data);
+        var $msg = $("#game_id");
+
+        $msg.val(data.game_id);
+        output(
+          '<span class="username-msg">' +
+            data.game_id +
+            ":</span> " +
+            data.message
+        );
+      });
+      socket.on("joined", function (data) {
+        console.log("joined", data);
+        refresh();
+      });
+      socket.on("mejoined", function (data) {
+        console.log("mejoined", data);
+        refresh(undefined, undefined, data.state, data.me);
+      });
+      socket.on("gameupdate", function (data) {
+        console.log("gameupdate", data);
+        refresh(undefined, undefined, data, undefined);
+      });
+      socket.on("meupdate", function (data) {
+        console.log("meupdate", data);
+        refresh(undefined, undefined, undefined, data);
+      });
+
+      socket.on("disconnect", function () {
+        output(
+          '<span class="disconnect-msg">The client has disconnected!</span>'
+        );
+      });
+      socket.on("reconnect_attempt", (attempts) => {
+        console.log("Try to reconnect at " + attempts + " attempt(s).");
+      });
+
+      function sendPlay() {
+        params = getPlaytParams();
+        socket.emit("play", params);
+      }
+      function sendThrow() {
+        params = getPlaytParams("THROW");
+        socket.emit("play", params);
+      }
+      function sendBuy() {
+        params = getPlaytParams("BUY");
+        socket.emit("play", params);
+      }
+      function sendEnd() {
+        params = getPlaytParams("END");
+        socket.emit("play", params);
+      }
+
+      function sendMessage() {
+        var $msg = $("#msg");
+        var message = $msg.val();
+        $msg.val("");
+        var jsonObject = {
+          userName: userName,
+          message: message,
+          actionTime: new Date(),
+        };
+        socket.emit("play", jsonObject);
+      }
+
+      function output(message) {
+        var currentTime =
+          "<span class='time'>" + moment().format("HH:mm:ss.SSS") + "</span>";
+        var element = $("<div>" + currentTime + " " + message + "</div>");
+        $("#console").prepend(element);
+      }
+
+      function sendCreate() {
+        socket.emit("create", {});
+      }
+      function sendJoin() {
+        var $msg = $("#game_id");
+        var message = $msg.val();
+        socket.emit("join", { game_id: message });
+      }
+      $(document).keydown(function (e) {
+        if (e.keyCode == 13) {
+          $("#send").click();
+        }
+      });
+      function refresh(game_id, player_id, gameState, player) {
+        var $game_id = $("#game_id");
+        var $player_id = $("#player_id");
+        var $cards = $("#cards");
+
+        var $ccards = $("#ccards");
+        if (player) {
+          $cards.html(
+            player.cards
+              .map(
+                (c) =>
+                  `<option >${JSON.stringify(c)}
+                  </option>`
+              )
+              .join("\n")
+          );
+          $player_id.val(player.player_id);
+        }
+        if (gameState) {
+          $ccards.html(
+            gameState.center_cards
+              .map(
+                (c) =>
+                  `<option >${JSON.stringify(c)}
+                  </option>`
+              )
+              .join("\n")
+          );
+        }
+      }
+      function getPlaytParams(type = "EAT") {
+        var $game_id = $("#game_id");
+        var $player_id = $("#player_id");
+        var $cards = $("#cards");
+        var $ccards = $("#ccards");
+        return {
+          game_id: $game_id.val(),
+          player_id: $player_id.val(),
+          playParams: {
+            cards: [...$cards.find(":selected")].map((v) => {
+              return JSON.parse(v.text);
+            }),
+            center_card: [...$ccards.find(":selected")].map((v) => {
+              return JSON.parse(v.text);
+            })[0],
+            type: type,
+          },
+        };
+      }
+    </script>
+  </body>
+</html>
